@@ -7,9 +7,9 @@
     "std/": "https://deno.land/std@0.201.0/"
   },
   "tasks": {
-    "dev": "deno run -A --watch src/index.ts",
-    "start": "deno run -A src/index.ts",
-    "local": "deno run -A --allow-read scripts/local_runner.ts"
+    "dev": "deno run --allow-net --allow-env --allow-read --watch=src src/index.ts",
+    "start": "deno run --allow-net --allow-env src/index.ts",
+    "local": "deno run --allow-net --allow-env --allow-read scripts/local_runner.ts"
   },
   "exclude": ["./dist/", "./build/"]
 }
