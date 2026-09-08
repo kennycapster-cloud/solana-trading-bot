@@ -10,12 +10,20 @@ async function handleRequest(request: Request): Promise<Response> {
     // Accept GET for testing and POST for explicit control
     const mode = url.searchParams.get('mode') || 'scan';
 
+    // Warmup safety: many platforms (including Deno Deploy) call handlers during warmup.
+    // Avoid doing network-heavy work during warmup. Recognize common warmup signals and return quickly.
+    const warmupHeader = request.headers.get('x-warmup') || request.headers.get('x-deno-warmup') || request.headers.get('x-vercel-warmup');
+    if (mode === 'warmup' || warmupHeader) {
+      return new Response(JSON.stringify({ success: true, info: 'warmup_ack' }), { status: 200 });
+    }
+
     const amountLamports = Math.round(TRADE_SIZE_SOL * LAMPORTS_PER_SOL);
 
     // 1) Quote SOL -> USDC
     const quote1 = await getQuote(SOL_MINT, USDC_MINT, amountLamports);
     if (!quote1 || !quote1.data || quote1.data.length === 0) {
-      return new Response(JSON.stringify({ success: false, reason: 'no_quote_sol_to_usdc', quote: quote1 }), { status: 500 });
+      // Return a non-fatal response so warmups or transient network errors don't fail the whole deployment.
+      return new Response(JSON.stringify({ success: false, reason: 'no_quote_sol_to_usdc_or_network_issue', quote: quote1 }), { status: 200 });
     }
     const best1 = quote1.data[0];
     const outUsdc = Number(best1.outAmount); // in USDC base units (6 decimals)
@@ -23,7 +31,7 @@ async function handleRequest(request: Request): Promise<Response> {
     // 2) Quote USDC -> SOL using outUsdc as amount
     const quote2 = await getQuote(USDC_MINT, SOL_MINT, outUsdc);
     if (!quote2 || !quote2.data || quote2.data.length === 0) {
-      return new Response(JSON.stringify({ success: false, reason: 'no_quote_usdc_to_sol', quote: quote2 }), { status: 500 });
+      return new Response(JSON.stringify({ success: false, reason: 'no_quote_usdc_to_sol_or_network_issue', quote: quote2 }), { status: 200 });
     }
     const best2 = quote2.data[0];
     const roundtripSol = Number(best2.outAmount) / 1e9; // SOL has 9 decimals
@@ -57,12 +65,27 @@ async function handleRequest(request: Request): Promise<Response> {
       }
 
       // Load keypair
-      const signer = loadKeypairFromEnv();
+      let signer;
+      try {
+        signer = loadKeypairFromEnv();
+      } catch (err) {
+        scanResult.action = 'missing_keypair';
+        scanResult.execError = String(err);
+        return new Response(JSON.stringify(scanResult), { status: 200 });
+      }
       const user = signer.publicKey.toBase58();
 
       // Get swap transaction payloads from Jupiter for both routes (SOL->USDC and USDC->SOL)
-      const swapPayload1 = await getSwapTransactionPayload(best1, user, true);
-      const swapPayload2 = await getSwapTransactionPayload(best2, user, true);
+      let swapPayload1: any;
+      let swapPayload2: any;
+      try {
+        swapPayload1 = await getSwapTransactionPayload(best1, user, true);
+        swapPayload2 = await getSwapTransactionPayload(best2, user, true);
+      } catch (err) {
+        scanResult.action = 'swap_payload_fetch_failed';
+        scanResult.execError = String(err);
+        return new Response(JSON.stringify(scanResult), { status: 500 });
+      }
 
       // Extract base64 transaction strings
       const base64Tx1 = swapPayload1?.swapTransaction?.transaction || swapPayload1?.swapTransaction?.transactionV1 || swapPayload1?.swapTransaction?.legacyTransaction?.transaction;
