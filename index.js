@@ -1,9 +1,17 @@
+// index.js is intended for local development only. To avoid it being accidentally used as a Deno Deploy entrypoint
+// that would run setInterval at startup (causing network calls during warmup), we make it a no-op unless RUN_LOCAL env var is set.
+
 import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from '@solana/web3.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Verify connection configuration
+if (process.env.RUN_LOCAL !== 'true') {
+  console.log('index.js is disabled unless RUN_LOCAL=true is set. This file is for local development only.');
+  process.exit(0);
+}
+
+// When RUN_LOCAL=true we proceed with the local loop
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "https://api.mainnet-beta.solana.com";
 const connection = new Connection(RPC_ENDPOINT, 'confirmed');
 
@@ -48,4 +56,3 @@ async function main() {
 }
 
 main();
-
