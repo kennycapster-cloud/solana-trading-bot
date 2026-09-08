@@ -1,79 +1,121 @@
-# Fresh Framework Integration
+# Solana Trading Bot - Deployment Guide
 
-Solana Trading Bot متوافق الآن تماماً مع Deno Deploy وإطار عمل Fresh.
+This guide covers deploying the Solana Trading Bot to Deno Deploy and running it locally.
 
-## البناء والنشر
+## Local Development
 
-### التطوير المحلي
+### Prerequisites
+- Install Deno: https://deno.land
+
+### Setup
 
 ```bash
-# تثبيت Deno
-curl -fsSL https://deno.land/install.sh | sh
+# Clone the repository
+git clone https://github.com/kennycapster-cloud/solana-trading-bot.git
+cd solana-trading-bot
 
-# إعداد ملف .env
+# Create .env file from example
 cp .env.example .env
-# عدّل .env بإدراج إعداداتك
 
-# تشغيل البوت محلياً
-deno run -A src/index.ts
-
-# أو باستخدام مهمة البناء
-deno task build
-deno task preview
+# Edit .env with your configuration:
+# - PRIVATE_KEY: Your Solana wallet private key (optional for testing)
+# - RPC_ENDPOINT: Solana RPC endpoint
+# - TRADE_SIZE_SOL: Amount of SOL per trade (default: 0.1)
+# - SLIPPAGE_BPS: Slippage tolerance in basis points (default: 50)
+# - MIN_PROFIT_USD: Minimum profit in USD to execute trade (default: 2)
+# - ENABLE_LIVE: Set to "true" to enable live trading (default: false)
 ```
 
-### Docker
+### Running Locally
 
 ```bash
-# بناء صورة Docker
+# Run with auto-reload during development
+deno task dev
+
+# Or run once
+deno task start
+
+# Using local_runner.ts with .env file
+deno run -A --allow-read scripts/local_runner.ts
+```
+
+## Docker Deployment
+
+```bash
+# Build image
 docker build -t solana-trading-bot .
 
-# تشغيل الحاوية
+# Run container with .env file
 docker run -p 8000:8000 --env-file .env solana-trading-bot
 ```
 
-### Deno Deploy
+## Deno Deploy
 
-1. ادفع مستودعك إلى GitHub
-2. اذهب إلى [deno.com/deploy](https://deno.com/deploy)
-3. أنشئ مشروع جديد وربطه بمستودعك على GitHub
-4. عيّن نقطة الدخول إلى `src/index.ts`
-5. اضبط متغيرات البيئة التالية (Secrets):
-   - `PRIVATE_KEY`: مفتاح محفظتك الخاص
-   - `RPC_ENDPOINT`: نقطة نهاية Solana RPC
-   - `TRADE_SIZE_SOL`: مبلغ التداول (مثل 0.1)
-   - `SLIPPAGE_BPS`: تحمل الانزلاق (مثل 50)
-   - `MIN_PROFIT_USD`: حد الربح الأدنى (مثل 2)
-   - `ENABLE_LIVE`: عيّن على "true" فقط بعد الاختبار
-6. انشر المشروع
+### Setup on Deno Deploy
 
-## مهام البناء
+1. Push your repository to GitHub
+2. Go to [deno.com/deploy](https://deno.com/deploy)
+3. Create a new project and connect it to your GitHub repository
+4. Set the entrypoint to `src/index.ts`
+5. Add the following environment variables as **Secrets**:
+   - `PRIVATE_KEY`: Your wallet private key (JSON array or base58)
+   - `RPC_ENDPOINT`: Solana RPC endpoint
+   - `TRADE_SIZE_SOL`: Trade amount in SOL (e.g., 0.1)
+   - `SLIPPAGE_BPS`: Slippage tolerance (e.g., 50)
+   - `MIN_PROFIT_USD`: Minimum profit threshold (e.g., 2)
+   - `ENABLE_LIVE`: Enable live trading ("true" or "false")
+6. Deploy the project
 
-أوامر `deno task` المتاحة في deno.json:
+### Available Tasks
+
+In `deno.json`:
 
 ```bash
-deno task build   # بناء المشروع
-deno task dev     # التطوير مع إعادة تحميل فوري
-deno task preview # معاينة الإنتاج
-deno task start   # تشغيل خادم الإنتاج
+deno task dev      # Development with file watching
+deno task start    # Production run
+deno task local    # Run with local .env file
 ```
 
-## الميزات الرئيسية
+## Security Notes
 
-- ✅ بدء آمن بدون PRIVATE_KEY (يستخدم القيم الافتراضية)
-- ✅ معالجة طلبات الإحماء (استجابة سريعة، لا تداول)
-- ✅ تنفيذ معاملات ذري (كلا التداولين في معاملة واحدة)
-- ✅ مرونة في الخطأ مع منطق إعادة المحاولة
-- ✅ متوافق مع Deno Deploy (بدون تبعيات Node.js)
-- ✅ جاهز لإطار عمل Fresh
+⚠️ **CRITICAL SECURITY WARNINGS:**
 
-## سلامة الإعدادات
+- **NEVER commit PRIVATE_KEY to git**. Always use Deno Deploy Secrets.
+- **Start with ENABLE_LIVE=false** and test thoroughly on devnet before enabling mainnet trading.
+- Use trusted RPC endpoints (e.g., Helius, Magic Eden).
+- Set reasonable limits on TRADE_SIZE_SOL and MIN_PROFIT_USD.
+- Monitor your deployments regularly.
 
-وحدة `src/config.ts` تحمّل جميع الإعدادات من متغيرات البيئة مع قيم افتراضية معقولة.
-هذا يمنع فشل البناء عندما لا تتوفر الأسرار.
+## Features
 
-## ملاحظات الأمان
+✅ Safe startup without PRIVATE_KEY (uses default values)
+✅ Warmup request handling (fast response, no trades)
+✅ Atomic transaction execution (both swaps in one transaction)
+✅ Error handling with retry logic
+✅ Deno Deploy compatible (no Node.js dependencies)
+✅ Clean, minimal configuration
 
-- **PRIVATE_KEY**: لا تلتزم بمستودع التحكم بالإصدارات. استخدم Deno Deploy Secrets.
-- **ENABLE_LIVE**: ابدأ بـ `false` وفعّل فقط بعد الاختبار الشامل على devnet.
-- **RPC_ENDPOINT**: استخدم موفر RPC موثوق (انظر [helius.dev](https://helius.dev) أو [magic-eden.io](https://magic-eden.io))
+## Troubleshooting
+
+### "Module not found: https://deno.land/x/fresh@1.6.0"
+This error has been fixed. The project no longer depends on the Fresh framework. If you see this error, ensure you're using the latest version of the repository.
+
+### "Permission denied" errors
+When running locally, ensure you use the `-A` flag:
+```bash
+deno run -A src/index.ts
+```
+
+### RPC connection errors
+- Verify your RPC_ENDPOINT is correct and accessible
+- Check your network connection
+- Try using a different RPC provider
+
+### Transaction execution failures
+- Ensure ENABLE_LIVE is set to "false" during testing
+- Verify your wallet has sufficient balance
+- Check SLIPPAGE_BPS setting (too low may cause failures)
+
+## License
+
+This project is provided as-is for educational and trading purposes. Use at your own risk.
