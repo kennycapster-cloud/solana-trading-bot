@@ -28,3 +28,37 @@ export async function signAndSendBase64Transaction(base64Tx: string, signer: Key
   await connection.confirmTransaction(sig, 'confirmed');
   return sig;
 }
+
+export async function combineAndSendBase64Transactions(base64Txs: string[], signer: Keypair) {
+  if (!Array.isArray(base64Txs) || base64Txs.length === 0) throw new Error('No transactions to combine');
+
+  // Deserialize each transaction and extract instructions
+  const txs: Transaction[] = [];
+  for (const b64 of base64Txs) {
+    const bytes = base64ToUint8Array(b64);
+    // @ts-ignore
+    const t = Transaction.from(bytes);
+    txs.push(t);
+  }
+
+  // Create a new transaction and append all instructions in order
+  const combined = new Transaction();
+  for (const t of txs) {
+    for (const ix of t.instructions) {
+      combined.add(ix);
+    }
+  }
+
+  // Set fee payer and recent blockhash
+  combined.feePayer = signer.publicKey;
+  const { blockhash } = await connection.getRecentBlockhash('confirmed');
+  combined.recentBlockhash = blockhash;
+
+  // Partially sign with our keypair (this will be the only signer by default)
+  combined.partialSign(signer);
+
+  const raw = combined.serialize();
+  const sig = await connection.sendRawTransaction(raw, { skipPreflight: false, preflightCommitment: 'confirmed' });
+  await connection.confirmTransaction(sig, 'confirmed');
+  return sig;
+}

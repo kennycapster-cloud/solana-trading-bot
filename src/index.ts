@@ -1,8 +1,8 @@
 import { serve } from "https://deno.land/std@0.201.0/http/server.ts";
 import { getQuote, getSwapTransactionPayload } from './jupiter.ts';
-import { loadKeypairFromEnv, signAndSendBase64Transaction, connection } from './solana.ts';
+import { loadKeypairFromEnv, signAndSendBase64Transaction, combineAndSendBase64Transactions, connection } from './solana.ts';
 import { TRADE_SIZE_SOL, USDC_MINT, SOL_MINT, ENABLE_LIVE, MIN_PROFIT_USD } from './config.ts';
-import { LAMPORTS_PER_SOL } from 'https://esm.sh/@solana/web3.js@1.95.0';
+import { LAMPORTS_PER_SOL, PublicKey } from 'https://esm.sh/@solana/web3.js@1.95.0';
 
 async function handleRequest(request: Request): Promise<Response> {
   try {
@@ -33,7 +33,6 @@ async function handleRequest(request: Request): Promise<Response> {
 
     // Convert profit to USD roughly using outUsdc
     const outUsdcFloat = outUsdc / 1e6;
-    // When doing roundtrip, the USD change is (outUsdc -> back to SOL). We'll approximate profit in USD as profitSol * last SOL price.
     // Estimate SOL price by (outUsdc / startingSol)
     const estSolPrice = outUsdcFloat / startingSol;
     const profitUsd = profitSol * estSolPrice;
@@ -51,7 +50,7 @@ async function handleRequest(request: Request): Promise<Response> {
     };
 
     if (profitUsd >= MIN_PROFIT_USD) {
-      // Candidate to execute. If ENABLE_LIVE is true, request swap payload and execute SOL->USDC (one-way) as demonstration.
+      // Candidate to execute. If ENABLE_LIVE is true, request swap payloads for both legs and execute them atomically.
       if (!ENABLE_LIVE) {
         scanResult.action = 'would_execute_but_live_disabled';
         return new Response(JSON.stringify(scanResult), { status: 200 });
@@ -61,29 +60,32 @@ async function handleRequest(request: Request): Promise<Response> {
       const signer = loadKeypairFromEnv();
       const user = signer.publicKey.toBase58();
 
-      // Get swap transaction payload from Jupiter for the first route (SOL->USDC)
-      const swapPayload = await getSwapTransactionPayload(best1, user, true);
+      // Get swap transaction payloads from Jupiter for both routes (SOL->USDC and USDC->SOL)
+      const swapPayload1 = await getSwapTransactionPayload(best1, user, true);
+      const swapPayload2 = await getSwapTransactionPayload(best2, user, true);
 
-      if (!swapPayload || !swapPayload.swapTransaction || !swapPayload.swapTransaction.legacyTransaction) {
-        // Jupiter may return 'swapTransaction' with 'transaction' as base64 string or 'legacyTransaction'. Try both.
-      }
+      // Extract base64 transaction strings
+      const base64Tx1 = swapPayload1?.swapTransaction?.transaction || swapPayload1?.swapTransaction?.transactionV1 || swapPayload1?.swapTransaction?.legacyTransaction?.transaction;
+      const base64Tx2 = swapPayload2?.swapTransaction?.transaction || swapPayload2?.swapTransaction?.transactionV1 || swapPayload2?.swapTransaction?.legacyTransaction?.transaction;
 
-      // Jupiter v6 returns swapTransaction.transaction (base64) typically
-      const base64Tx = swapPayload.swapTransaction?.transaction || swapPayload.swapTransaction?.transactionV1 || swapPayload.swapTransaction?.legacyTransaction?.transaction;
-
-      if (!base64Tx) {
-        // Try other fields
-        // Return debug
-        scanResult.swapPayload = swapPayload;
-        scanResult.action = 'no_base64_tx_in_swap_payload';
+      if (!base64Tx1 || !base64Tx2) {
+        scanResult.swapPayload1 = swapPayload1;
+        scanResult.swapPayload2 = swapPayload2;
+        scanResult.action = 'no_base64_tx_in_swap_payloads';
         return new Response(JSON.stringify(scanResult), { status: 500 });
       }
 
-      // Sign & send
-      const sig = await signAndSendBase64Transaction(base64Tx, signer);
-      scanResult.action = 'executed_swap_sol_to_usdc';
-      scanResult.signature = sig;
-      return new Response(JSON.stringify(scanResult), { status: 200 });
+      // Combine both transactions into one atomic transaction and send
+      try {
+        const sig = await combineAndSendBase64Transactions([base64Tx1, base64Tx2], signer);
+        scanResult.action = 'executed_atomic_roundtrip';
+        scanResult.signature = sig;
+        return new Response(JSON.stringify(scanResult), { status: 200 });
+      } catch (execErr) {
+        scanResult.action = 'execution_failed';
+        scanResult.execError = String(execErr);
+        return new Response(JSON.stringify(scanResult), { status: 500 });
+      }
     }
 
     scanResult.action = 'no_profitable_opportunity';
