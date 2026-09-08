@@ -1,8 +1,4 @@
-// Local development runner for Fresh framework
-// Run with: deno run -A --watch=static/,routes/ dev.ts
-
-import { start } from "fresh";
-import manifest from "./fresh.gen.ts";
-import config from "./fresh.config.ts";
-
-await start(manifest, config);
+// This file is kept for backward compatibility only.
+// For development, use: deno task dev
+// This starts the trading bot with file watching enabled.
+console.log("Use 'deno task dev' to run the trading bot with auto-reload.");
