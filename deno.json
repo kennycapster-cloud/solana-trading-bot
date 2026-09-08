@@ -2,5 +2,8 @@
   "compilerOptions": {
     "lib": ["dom", "esnext"],
     "strict": true
+  },
+  "imports": {
+    "std/": "https://deno.land/std@0.201.0/"
   }
 }
