@@ -1,15 +1,4 @@
-{
-  "name": "solana-arbitrage-local",
-  "version": "1.0.0",
-  "description": "Local Solana Arbitrage Bot",
-  "type": "module",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js"
-  },
-  "dependencies": {
-    "@solana/web3.js": "^1.95.0",
-    "dotenv": "^16.4.5"
-  }
-}
-
+# This file is deprecated and not used by Deno Deploy.
+# The project now uses deno.json for configuration.
+# For Node.js environments, this is kept for reference only.
+# Please use Deno instead: https://deno.land

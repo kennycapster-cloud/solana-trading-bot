@@ -1,2 +1,2 @@
-// This file is no longer needed.
-// The Solana Trading Bot does not use the Fresh framework.
+// DEPRECATED: Fresh framework is no longer used.
+// The Solana Trading Bot is a pure Deno backend service.
