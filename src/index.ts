@@ -118,11 +118,33 @@ async function handleRequest(request: Request): Promise<Response> {
   }
 }
 
-// Export default handler for Deno Deploy and also run a local server when executed directly
+// Export default handler for Deno Deploy
 export default handleRequest;
 
+// ========================================
+// Dummy HTTP Server for Deno Deploy
+// ========================================
+// Deno Deploy requires the application to listen on a port to stay alive.
+// This simple server keeps the process running and handles health checks.
+
 if (import.meta.main) {
-  // Local dev: start server
-  console.log('Starting local HTTP server on http://localhost:8000');
+  // For local execution: Start server with request handler
+  console.log('🚀 Solana Trading Bot starting on http://localhost:8000');
   serve(handleRequest, { port: 8000 });
+} else {
+  // For Deno Deploy: Start a dummy server in the background to keep the process alive
+  // The handler will be invoked by Deno Deploy's HTTP request routing
+  const server = serve(
+    async (req: Request) => {
+      // Respond to health checks and dummy requests
+      if (req.url.includes('/health')) {
+        return new Response(JSON.stringify({ status: 'Bot is running', timestamp: new Date().toISOString() }), { status: 200 });
+      }
+      // Route all other requests to the trading bot handler
+      return handleRequest(req);
+    },
+    { port: 8000 }
+  );
+
+  console.log('✅ Bot is running on port 8000 (Deno Deploy mode)');
 }
